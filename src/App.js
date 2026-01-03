@@ -45,6 +45,8 @@ const ColorSampleTracker = () => {
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [showEditClientModal, setShowEditClientModal] = useState(false);
   const [showDeleteClientModal, setShowDeleteClientModal] = useState(false);
+  const [showClientDashboard, setShowClientDashboard] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
   const [clients, setClients] = useState([]);
   const [clientToEdit, setClientToEdit] = useState(null);
   const [clientToDelete, setClientToDelete] = useState(null);
@@ -327,6 +329,58 @@ const ColorSampleTracker = () => {
 
   const getClientHistory = (clientName) => {
     return surveys.filter(s => s.cliente.toLowerCase() === clientName.toLowerCase());
+  };
+
+  const openClientDashboard = (client) => {
+    setSelectedClient(client);
+    setShowClientDashboard(true);
+  };
+
+  const getClientAnalytics = (clientName) => {
+    const clientSurveys = getClientHistory(clientName);
+    
+    if (clientSurveys.length === 0) return null;
+
+    const colorCount = {};
+    const coloristaCount = {};
+    const domiciliarioCount = {};
+    const monthlyData = {};
+
+    clientSurveys.forEach(s => {
+      // Contar colores
+      colorCount[s.color] = (colorCount[s.color] || 0) + 1;
+      
+      // Contar coloristas
+      coloristaCount[s.colorista] = (coloristaCount[s.colorista] || 0) + 1;
+      
+      // Contar domiciliarios
+      domiciliarioCount[s.domiciliario] = (domiciliarioCount[s.domiciliario] || 0) + 1;
+      
+      // Agrupar por mes
+      const date = new Date(s.fecha);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      monthlyData[monthKey] = (monthlyData[monthKey] || 0) + 1;
+    });
+
+    // Convertir datos mensuales a array ordenado
+    const monthlyArray = Object.entries(monthlyData)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, count]) => ({
+        mes: month,
+        muestras: count
+      }));
+
+    return {
+      totalMuestras: clientSurveys.length,
+      colorMasSolicitado: Object.entries(colorCount).sort((a, b) => b[1] - a[1])[0],
+      coloristaMasUsado: Object.entries(coloristaCount).sort((a, b) => b[1] - a[1])[0],
+      domiciliarioMasUsado: Object.entries(domiciliarioCount).sort((a, b) => b[1] - a[1])[0],
+      colorData: Object.entries(colorCount).map(([name, value]) => ({ name, value })),
+      coloristaData: Object.entries(coloristaCount).map(([name, value]) => ({ name, value })),
+      monthlyData: monthlyArray,
+      primeraVisita: clientSurveys[clientSurveys.length - 1]?.fecha,
+      ultimaVisita: clientSurveys[0]?.fecha
+    };
   };
 
   const filteredClients = clients.filter(client =>
@@ -1149,6 +1203,13 @@ const ColorSampleTracker = () => {
                         </div>
                         <div className="flex gap-1">
                           <button
+                            onClick={() => openClientDashboard(client)}
+                            className="bg-purple-500 text-white p-2 rounded-lg hover:bg-purple-600 transition-all"
+                            title="Ver Dashboard"
+                          >
+                            <TrendingUp className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => openEditClientModal(client)}
                             className="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition-all"
                             title="Editar"
@@ -1721,6 +1782,210 @@ const ColorSampleTracker = () => {
             </div>
           </div>
         )}
+
+        {/* Modal Dashboard del Cliente */}
+        {showClientDashboard && selectedClient && (() => {
+          const clientAnalytics = getClientAnalytics(selectedClient.nombre);
+          const clientHistory = getClientHistory(selectedClient.nombre);
+          
+          return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+              <div className={`${cardBg} rounded-2xl p-8 max-w-6xl w-full my-8 max-h-[95vh] overflow-y-auto`}>
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className={`text-3xl font-bold ${textPrimary} mb-2`}>📊 Dashboard de Cliente</h3>
+                    <p className={`text-xl ${textSecondary}`}>{selectedClient.nombre}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowClientDashboard(false);
+                      setSelectedClient(null);
+                    }}
+                    className={`${textSecondary} hover:${textPrimary} text-3xl px-3`}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {clientHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Package className={`w-20 h-20 mx-auto mb-4 ${textSecondary}`} />
+                    <p className={`${textSecondary} text-lg`}>Este cliente aún no tiene muestras registradas</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Información del Cliente */}
+                    <div className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-xl p-6 mb-6`}>
+                      <h4 className={`text-lg font-bold ${textPrimary} mb-4`}>📋 Información del Cliente</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {selectedClient.telefono && (
+                          <div>
+                            <p className={`text-sm ${textSecondary}`}>Teléfono</p>
+                            <p className={`text-lg ${textPrimary} font-semibold`}>📞 {selectedClient.telefono}</p>
+                          </div>
+                        )}
+                        {selectedClient.email && (
+                          <div>
+                            <p className={`text-sm ${textSecondary}`}>Email</p>
+                            <p className={`text-lg ${textPrimary} font-semibold`}>✉️ {selectedClient.email}</p>
+                          </div>
+                        )}
+                        {selectedClient.direccion && (
+                          <div>
+                            <p className={`text-sm ${textSecondary}`}>Dirección</p>
+                            <p className={`text-lg ${textPrimary} font-semibold`}>📍 {selectedClient.direccion}</p>
+                          </div>
+                        )}
+                        <div>
+                          <p className={`text-sm ${textSecondary}`}>Cliente desde</p>
+                          <p className={`text-lg ${textPrimary} font-semibold`}>📅 {new Date(clientAnalytics.primeraVisita).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      {selectedClient.notas && (
+                        <div className="mt-4 pt-4 border-t border-gray-300">
+                          <p className={`text-sm ${textSecondary}`}>Notas</p>
+                          <p className={`${textPrimary} mt-1`}>{selectedClient.notas}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tarjetas de Estadísticas */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                      <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-6 shadow-lg">
+                        <p className="text-blue-100 text-sm">Total de Muestras</p>
+                        <p className="text-3xl font-bold mt-2">{clientAnalytics.totalMuestras}</p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl p-6 shadow-lg">
+                        <p className="text-purple-100 text-sm">Color Favorito</p>
+                        <p className="text-xl font-bold mt-2">{clientAnalytics.colorMasSolicitado[0]}</p>
+                        <p className="text-purple-100 text-sm">{clientAnalytics.colorMasSolicitado[1]} veces</p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl p-6 shadow-lg">
+                        <p className="text-green-100 text-sm">Colorista Preferido</p>
+                        <p className="text-xl font-bold mt-2">{clientAnalytics.coloristaMasUsado[0]}</p>
+                        <p className="text-green-100 text-sm">{clientAnalytics.coloristaMasUsado[1]} trabajos</p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-xl p-6 shadow-lg">
+                        <p className="text-orange-100 text-sm">Última Muestra</p>
+                        <p className="text-lg font-bold mt-2">{new Date(clientAnalytics.ultimaVisita).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+
+                    {/* Gráficos */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                      {/* Gráfico de Colores */}
+                      <div className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-xl p-6`}>
+                        <h4 className={`text-lg font-bold ${textPrimary} mb-4`}>🎨 Colores Solicitados</h4>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <BarChart data={clientAnalytics.colorData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar dataKey="value" fill="#8b5cf6" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      {/* Gráfico de Coloristas */}
+                      <div className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-xl p-6`}>
+                        <h4 className={`text-lg font-bold ${textPrimary} mb-4`}>👨‍🎨 Distribución por Colorista</h4>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <PieChart>
+                            <Pie
+                              data={clientAnalytics.coloristaData}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={80}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {clientAnalytics.coloristaData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Gráfico de Tendencia Mensual */}
+                    {clientAnalytics.monthlyData.length > 1 && (
+                      <div className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-xl p-6 mb-6`}>
+                        <h4 className={`text-lg font-bold ${textPrimary} mb-4`}>📈 Historial Mensual</h4>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <LineChart data={clientAnalytics.monthlyData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="mes" />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            <Line type="monotone" dataKey="muestras" stroke="#8b5cf6" strokeWidth={2} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {/* Historial Completo de Muestras */}
+                    <div className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-xl p-6`}>
+                      <h4 className={`text-lg font-bold ${textPrimary} mb-4`}>📝 Historial de Muestras ({clientHistory.length})</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className={darkMode ? 'bg-gray-800' : 'bg-gray-200'}>
+                            <tr>
+                              <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Fecha</th>
+                              <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Color</th>
+                              <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Colorista</th>
+                              <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Domiciliario</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {clientHistory.map((survey) => (
+                              <tr key={survey.id} className={`border-b ${darkMode ? 'border-gray-600 hover:bg-gray-600' : 'border-gray-300 hover:bg-gray-100'}`}>
+                                <td className={`px-4 py-3 text-sm ${textSecondary}`}>
+                                  {new Date(survey.fecha).toLocaleDateString()}
+                                </td>
+                                <td className={`px-4 py-3 text-sm ${textPrimary} font-medium`}>
+                                  {survey.color}
+                                </td>
+                                <td className={`px-4 py-3 text-sm ${textSecondary}`}>
+                                  {survey.colorista}
+                                </td>
+                                <td className={`px-4 py-3 text-sm ${textSecondary}`}>
+                                  {survey.domiciliario}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Botón de Cerrar al Final */}
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        onClick={() => {
+                          setShowClientDashboard(false);
+                          setSelectedClient(null);
+                        }}
+                        className="bg-gray-500 text-white px-8 py-3 rounded-lg hover:bg-gray-600 transition-all font-semibold"
+                      >
+                        Cerrar
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="mb-6">
           <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-xl p-6 shadow-lg">
