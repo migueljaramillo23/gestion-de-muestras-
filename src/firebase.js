@@ -11,8 +11,7 @@ const firebaseConfig = {
   storageBucket: "color-sample-tracker.firebasestorage.app",
   messagingSenderId: "970745819794",
   appId: "1:970745819794:web:71df55ba9ae624a1026c4b"
-};
-
+ };
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 

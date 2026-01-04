@@ -1,12 +1,19 @@
+// ==========================================
+// PARTE 1 DE 3: IMPORTS, ESTADOS Y FUNCIONES PRINCIPALES
+// ==========================================
+
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
-import { Users, Package, Palette, TrendingUp, Download, FileSpreadsheet, Moon, Sun, Filter, Edit2, Trash2, Search, Bell } from 'lucide-react';
+import { Users, Package, Palette, TrendingUp, Download, FileSpreadsheet, Moon, Sun, Filter, Edit2, Trash2, Search, Bell, DollarSign, Calendar } from 'lucide-react';
 import { db } from './firebase';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, onSnapshot } from 'firebase/firestore';
 
 const ColorSampleTracker = () => {
+  // ==========================================
+  // ESTADOS
+  // ==========================================
   const [currentProfile, setCurrentProfile] = useState(null);
-  const [profiles, setProfiles] = useState(['Perfil 1', 'Admin']);
+  const [profiles, setProfiles] = useState(['Perfil 1', 'Admin', 'ROBIN', 'TAVO', 'VLADIMIR', 'ARLES']);
   const [newProfileName, setNewProfileName] = useState('');
   const [showNewProfileForm, setShowNewProfileForm] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
@@ -71,6 +78,9 @@ const ColorSampleTracker = () => {
     endDate: ''
   });
   
+  // Estado para el filtro de período del colorista
+  const [coloristaFilter, setColoristaFilter] = useState('all');
+  
   const [formData, setFormData] = useState({
     domiciliario: '',
     cliente: '',
@@ -81,6 +91,13 @@ const ColorSampleTracker = () => {
   
   const [surveys, setSurveys] = useState([]);
 
+  // Perfiles de coloristas
+  const coloristaProfiles = ['ROBIN', 'TAVO', 'VLADIMIR', 'ARLES'];
+
+  // ==========================================
+  // EFECTOS - CARGA DE DATOS
+  // ==========================================
+  
   // Cargar datos de Firebase en tiempo real
   useEffect(() => {
     const surveysRef = collection(db, 'surveys');
@@ -126,7 +143,11 @@ const ColorSampleTracker = () => {
     const savedDarkMode = localStorage.getItem('darkMode');
     const savedAdminPassword = localStorage.getItem('adminPassword');
     
-    if (savedProfiles) setProfiles(JSON.parse(savedProfiles));
+    if (savedProfiles) {
+      const loadedProfiles = JSON.parse(savedProfiles);
+      const updatedProfiles = [...new Set([...loadedProfiles, 'ROBIN', 'TAVO', 'VLADIMIR', 'ARLES'])];
+      setProfiles(updatedProfiles);
+    }
     if (savedDarkMode) setDarkMode(JSON.parse(savedDarkMode));
     if (savedAdminPassword) setAdminPassword(savedAdminPassword);
   }, []);
@@ -145,6 +166,10 @@ const ColorSampleTracker = () => {
     }
   }, [surveys, currentProfile]);
 
+  // ==========================================
+  // FUNCIONES DE NOTIFICACIONES
+  // ==========================================
+  
   const generateNotifications = () => {
     const newNotifications = [];
     const now = new Date();
@@ -189,10 +214,99 @@ const ColorSampleTracker = () => {
     setNotifications(newNotifications);
   };
 
+  // ==========================================
+  // FUNCIONES DE COLORISTAS
+  // ==========================================
+  
+  // Función para filtrar muestras por período para coloristas
+  const getColoristaSurveysByPeriod = (coloristaNombre) => {
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch(coloristaFilter) {
+      case 'week':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case 'year':
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      case 'all':
+      default:
+        startDate = new Date(0);
+        break;
+    }
+    
+    return surveys.filter(s => 
+      s.colorista === coloristaNombre && 
+      new Date(s.fecha) >= startDate
+    );
+  };
+
+  // Función para obtener analíticas del colorista
+  const getColoristaAnalytics = (coloristaNombre) => {
+    const coloristaSurveys = getColoristaSurveysByPeriod(coloristaNombre);
+    
+    if (coloristaSurveys.length === 0) return null;
+
+    const clienteCount = {};
+    const domiciliarioCount = {};
+    const colorCount = {};
+    const monthlyData = {};
+
+    coloristaSurveys.forEach(s => {
+      clienteCount[s.cliente] = (clienteCount[s.cliente] || 0) + 1;
+      domiciliarioCount[s.domiciliario] = (domiciliarioCount[s.domiciliario] || 0) + 1;
+      colorCount[s.color] = (colorCount[s.color] || 0) + 1;
+      
+      const date = new Date(s.fecha);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      monthlyData[monthKey] = (monthlyData[monthKey] || 0) + 1;
+    });
+
+    const monthlyArray = Object.entries(monthlyData)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, count]) => ({
+        mes: month,
+        muestras: count
+      }));
+
+    const bonificacion = coloristaSurveys.length * 1000;
+
+    return {
+      totalMuestras: coloristaSurveys.length,
+      bonificacion: bonificacion,
+      clienteMasFrecuente: Object.entries(clienteCount).sort((a, b) => b[1] - a[1])[0],
+      domiciliarioMasFrecuente: Object.entries(domiciliarioCount).sort((a, b) => b[1] - a[1])[0],
+      colorMasSolicitado: Object.entries(colorCount).sort((a, b) => b[1] - a[1])[0],
+      clienteData: Object.entries(clienteCount).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+      domiciliarioData: Object.entries(domiciliarioCount).map(([name, value]) => ({ name, value })),
+      colorData: Object.entries(colorCount).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+      monthlyData: monthlyArray
+    };
+  };
+
+  // ==========================================
+  // CONTINÚA EN PARTE 2...
+  // ==========================================
+  
+  // Las funciones de manejo de formularios, clientes, perfiles, etc. continúan en la Parte 2
+  // ==========================================
+// PARTE 2 DE 3: FUNCIONES DE MANEJO Y OPERACIONES
+// ==========================================
+
+// ESTA PARTE VA DESPUÉS DE LA PARTE 1
+// Copia todo este código y pégalo justo después del comentario "CONTINÚA EN PARTE 2..."
+
+  // ==========================================
+  // FUNCIONES DE MANEJO DE INPUTS
+  // ==========================================
+  
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     
-    // Si es el campo de cliente, actualizar y mostrar sugerencias
     if (name === 'cliente') {
       setFormData({
         ...formData,
@@ -224,13 +338,19 @@ const ColorSampleTracker = () => {
     });
   };
 
+  const handleEditInputChange = (e) => {
+    setEditFormData({
+      ...editFormData,
+      [e.target.name]: e.target.value
+    });
+  };
+
   const addClient = async () => {
     if (!clientFormData.nombre.trim()) {
       alert('El nombre del cliente es obligatorio');
       return;
     }
 
-    // Verificar si el cliente ya existe
     const existingClient = clients.find(c => 
       c.nombre.toLowerCase() === clientFormData.nombre.trim().toLowerCase()
     );
@@ -347,22 +467,15 @@ const ColorSampleTracker = () => {
     const monthlyData = {};
 
     clientSurveys.forEach(s => {
-      // Contar colores
       colorCount[s.color] = (colorCount[s.color] || 0) + 1;
-      
-      // Contar coloristas
       coloristaCount[s.colorista] = (coloristaCount[s.colorista] || 0) + 1;
-      
-      // Contar domiciliarios
       domiciliarioCount[s.domiciliario] = (domiciliarioCount[s.domiciliario] || 0) + 1;
       
-      // Agrupar por mes
       const date = new Date(s.fecha);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       monthlyData[monthKey] = (monthlyData[monthKey] || 0) + 1;
     });
 
-    // Convertir datos mensuales a array ordenado
     const monthlyArray = Object.entries(monthlyData)
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([month, count]) => ({
@@ -389,28 +502,22 @@ const ColorSampleTracker = () => {
     (client.email && client.email.toLowerCase().includes(clientSearchTerm.toLowerCase()))
   );
 
-  const handleEditInputChange = (e) => {
-    setEditFormData({
-      ...editFormData,
-      [e.target.name]: e.target.value
-    });
-  };
+  // ==========================================
+  // FUNCIONES CRUD - ENCUESTAS
+  // ==========================================
 
   const handleSubmit = async () => {
-    // Validación más estricta
     if (!formData.domiciliario || !formData.cliente || !formData.color || !formData.colorista) {
       alert('Por favor completa todos los campos');
       return;
     }
-    
-    // Validar que el cliente no sea solo espacios o caracteres especiales
+       
     const clienteTrimmed = formData.cliente.trim();
     if (clienteTrimmed.length === 0 || clienteTrimmed === '•' || clienteTrimmed === '-') {
       alert('Por favor ingresa un nombre de cliente válido');
       return;
     }
     
-    // Validar que el color no sea solo espacios o caracteres especiales
     const colorTrimmed = formData.color.trim();
     if (colorTrimmed.length === 0 || colorTrimmed === '•' || colorTrimmed === '-') {
       alert('Por favor ingresa un color válido');
@@ -489,6 +596,22 @@ const ColorSampleTracker = () => {
     }
   };
 
+  const deleteAllData = async () => {
+    try {
+      const batch = surveys.map(survey => deleteDoc(doc(db, 'surveys', survey.id)));
+      await Promise.all(batch);
+      setShowDeleteModal(false);
+      alert('✅ Datos eliminados');
+    } catch (error) {
+      console.error('Error:', error);
+      alert('❌ Error');
+    }
+  };
+
+  // ==========================================
+  // FUNCIONES DE PERFILES
+  // ==========================================
+
   const addNewProfile = () => {
     if (newProfileName.trim() && !profiles.includes(newProfileName.trim())) {
       setProfiles([...profiles, newProfileName.trim()]);
@@ -541,7 +664,7 @@ const ColorSampleTracker = () => {
   };
 
   const deleteProfile = () => {
-    if (profileToDelete && profileToDelete !== 'Admin') {
+    if (profileToDelete && profileToDelete !== 'Admin' && !coloristaProfiles.includes(profileToDelete)) {
       const updatedProfiles = profiles.filter(p => p !== profileToDelete);
       setProfiles(updatedProfiles);
       setShowDeleteProfileModal(false);
@@ -549,6 +672,10 @@ const ColorSampleTracker = () => {
       alert('Perfil eliminado');
     }
   };
+
+  // ==========================================
+  // FUNCIONES DE FILTROS Y REPORTES
+  // ==========================================
 
   const getFilteredSurveys = () => {
     let filtered = surveys;
@@ -682,18 +809,7 @@ const ColorSampleTracker = () => {
     link.href = URL.createObjectURL(blob);
     link.download = `informe_${new Date().toISOString().split('T')[0]}.html`;
     link.click();
-  };
 
-  const deleteAllData = async () => {
-    try {
-      const batch = surveys.map(survey => deleteDoc(doc(db, 'surveys', survey.id)));
-      await Promise.all(batch);
-      setShowDeleteModal(false);
-      alert('✅ Datos eliminados');
-    } catch (error) {
-      console.error('Error:', error);
-      alert('❌ Error');
-    }
   };
 
   const getAnalytics = (surveyData = null) => {
@@ -724,6 +840,10 @@ const ColorSampleTracker = () => {
     };
   };
 
+  // ==========================================
+  // VARIABLES DE ESTILO Y CONSTANTES
+  // ==========================================
+  
   const analytics = getAnalytics();
   const trendData = getTrendData();
   const COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#3b82f6'];
@@ -734,6 +854,20 @@ const ColorSampleTracker = () => {
   const textSecondary = darkMode ? 'text-gray-300' : 'text-gray-600';
   const inputBg = darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300';
 
+  // ==========================================
+  // CONTINÚA EN PARTE 3 CON EL RENDER/JSX...
+  // ==========================================
+  // ==========================================
+// PARTE 3 DE 3: JSX/RENDER - INTERFAZ VISUAL
+// ==========================================
+
+// ESTA PARTE VA DESPUÉS DE LA PARTE 2
+// Copia todo este código y pégalo justo después del comentario "CONTINÚA EN PARTE 3..."
+
+  // ==========================================
+  // PANTALLA DE CARGA
+  // ==========================================
+  
   if (loading) {
     return (
       <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
@@ -747,6 +881,10 @@ const ColorSampleTracker = () => {
     );
   }
 
+  // ==========================================
+  // PANTALLA DE SELECCIÓN DE PERFIL
+  // ==========================================
+  
   if (!currentProfile) {
     return (
       <div className={`min-h-screen ${bgClass} flex items-center justify-center p-4`}>
@@ -773,7 +911,7 @@ const ColorSampleTracker = () => {
                 >
                   {profile}
                 </button>
-                {profile !== 'Admin' && (
+                {profile !== 'Admin' && !coloristaProfiles.includes(profile) && (
                   <button
                     onClick={() => {
                       setProfileToDelete(profile);
@@ -822,6 +960,7 @@ const ColorSampleTracker = () => {
           )}
         </div>
 
+        {/* Modales de contraseña */}
         {showPasswordModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className={`${cardBg} rounded-2xl p-8 max-w-md w-full`}>
@@ -920,6 +1059,305 @@ const ColorSampleTracker = () => {
     );
   }
 
+  // ==========================================
+  // VISTA DE PERFIL DE COLORISTA (ROBIN, TAVO, VLADIMIR, ARLES)
+  // ==========================================
+  
+  if (coloristaProfiles.includes(currentProfile)) {
+    const coloristaAnalytics = getColoristaAnalytics(currentProfile);
+    
+    const getPeriodLabel = () => {
+      switch(coloristaFilter) {
+        case 'week': return 'Esta Semana';
+        case 'month': return 'Este Mes';
+        case 'year': return 'Este Año';
+        case 'all': return 'Todo el Tiempo';
+        default: return 'Todo el Tiempo';
+      }
+    };
+
+    return (
+      <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4`}>
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className={`${cardBg} rounded-2xl shadow-lg p-6 mb-6`}>
+            <div className="flex justify-between items-center flex-wrap gap-4">
+              <div>
+                <h1 className={`text-3xl font-bold ${textPrimary}`}>Dashboard de {currentProfile}</h1>
+                <p className={textSecondary}>Panel de estadísticas personales</p>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}>
+                  {darkMode ? <Sun className="w-6 h-6 text-yellow-400" /> : <Moon className="w-6 h-6 text-gray-600" />}
+                </button>
+                <button
+                  onClick={() => setCurrentProfile(null)}
+                  className="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-all"
+                >
+                  Cerrar Sesión
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Filtro de Período */}
+          <div className={`${cardBg} rounded-2xl shadow-lg p-6 mb-6`}>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-3">
+                <Calendar className={`w-6 h-6 ${darkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                <h3 className={`text-xl font-bold ${textPrimary}`}>Período: {getPeriodLabel()}</h3>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setColoristaFilter('week')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                    coloristaFilter === 'week' 
+                      ? 'bg-purple-500 text-white' 
+                      : `${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} hover:bg-purple-400 hover:text-white`
+                  }`}
+                >
+                  Semana
+                </button>
+                <button
+                  onClick={() => setColoristaFilter('month')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                    coloristaFilter === 'month' 
+                      ? 'bg-purple-500 text-white' 
+                      : `${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} hover:bg-purple-400 hover:text-white`
+                  }`}
+                >
+                  Mes
+                </button>
+                <button
+                  onClick={() => setColoristaFilter('year')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                    coloristaFilter === 'year' 
+                      ? 'bg-purple-500 text-white' 
+                      : `${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} hover:bg-purple-400 hover:text-white`
+                  }`}
+                >
+                  Año
+                </button>
+                <button
+                  onClick={() => setColoristaFilter('all')}
+                  className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                    coloristaFilter === 'all' 
+                      ? 'bg-purple-500 text-white' 
+                      : `${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} hover:bg-purple-400 hover:text-white`
+                  }`}
+                >
+                  Todo
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {!coloristaAnalytics ? (
+            <div className={`${cardBg} rounded-2xl shadow-lg p-12 text-center`}>
+              <Package className={`w-20 h-20 mx-auto mb-4 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+              <h3 className={`text-2xl font-semibold ${textSecondary} mb-2`}>No hay muestras en este período</h3>
+              <p className={textSecondary}>Cambia el filtro de período para ver más datos</p>
+            </div>
+          ) : (
+            <>
+              {/* Tarjetas de Estadísticas Principales */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-6 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-blue-100 text-sm">Total de Muestras</p>
+                      <p className="text-3xl font-bold mt-1">{coloristaAnalytics.totalMuestras}</p>
+                      <p className="text-blue-100 text-sm mt-1">realizadas</p>
+                    </div>
+                    <Package className="w-12 h-12 text-blue-200" />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl p-6 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-green-100 text-sm">Bonificación</p>
+                      <p className="text-3xl font-bold mt-1">
+                        ${coloristaAnalytics.bonificacion.toLocaleString('es-CO')}
+                      </p>
+                      <p className="text-green-100 text-sm mt-1">COP</p>
+                    </div>
+                    <DollarSign className="w-12 h-12 text-green-200" />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl p-6 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-purple-100 text-sm">Cliente Frecuente</p>
+                      <p className="text-xl font-bold mt-1">
+                        {coloristaAnalytics.clienteMasFrecuente ? coloristaAnalytics.clienteMasFrecuente[0] : 'N/A'}
+                      </p>
+                      <p className="text-purple-100 text-sm mt-1">
+                        {coloristaAnalytics.clienteMasFrecuente ? `${coloristaAnalytics.clienteMasFrecuente[1]} muestras` : ''}
+                      </p>
+                    </div>
+                    <Users className="w-12 h-12 text-purple-200" />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-xl p-6 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-orange-100 text-sm">Domiciliario Top</p>
+                      <p className="text-xl font-bold mt-1">
+                        {coloristaAnalytics.domiciliarioMasFrecuente ? coloristaAnalytics.domiciliarioMasFrecuente[0] : 'N/A'}
+                      </p>
+                      <p className="text-orange-100 text-sm mt-1">
+                        {coloristaAnalytics.domiciliarioMasFrecuente ? `${coloristaAnalytics.domiciliarioMasFrecuente[1]} entregas` : ''}
+                      </p>
+                    </div>
+                    <TrendingUp className="w-12 h-12 text-orange-200" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Detalles Adicionales */}
+              {coloristaAnalytics.colorMasSolicitado && (
+                <div className={`${cardBg} rounded-2xl shadow-lg p-6 mb-6`}>
+                  <div className="flex items-center gap-3 mb-4">
+                    <Palette className={`w-6 h-6 ${darkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                    <h3 className={`text-xl font-bold ${textPrimary}`}>Color Más Solicitado</h3>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className={`text-2xl font-bold ${textPrimary}`}>
+                      {coloristaAnalytics.colorMasSolicitado[0]}
+                    </p>
+                    <p className={`text-lg ${textSecondary}`}>
+                      {coloristaAnalytics.colorMasSolicitado[1]} veces
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Gráficos */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Top Clientes */}
+                <div className={`${cardBg} rounded-xl shadow-lg p-6`}>
+                  <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>Top 10 Clientes</h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={coloristaAnalytics.clienteData.slice(0, 10)}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="value" fill="#8b5cf6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Distribución por Domiciliario */}
+                <div className={`${cardBg} rounded-xl shadow-lg p-6`}>
+                  <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>Distribución por Domiciliario</h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={coloristaAnalytics.domiciliarioData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {coloristaAnalytics.domiciliarioData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Gráfico de Tendencia Mensual */}
+              {coloristaAnalytics.monthlyData.length > 0 && (
+                <div className={`${cardBg} rounded-xl shadow-lg p-6 mb-6`}>
+                  <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>📈 Tendencia Mensual</h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={coloristaAnalytics.monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="mes" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="muestras" stroke="#8b5cf6" strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Top Colores */}
+              <div className={`${cardBg} rounded-xl shadow-lg p-6 mb-6`}>
+                <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>Colores Más Trabajados</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={coloristaAnalytics.colorData.slice(0, 10)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#10b981" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Tabla de Todos los Clientes */}
+              <div className={`${cardBg} rounded-xl shadow-lg p-6`}>
+                <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>Todos los Clientes ({coloristaAnalytics.clienteData.length})</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-100'}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Pos.</th>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Cliente</th>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Muestras</th>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Porcentaje</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {coloristaAnalytics.clienteData.map((cliente, index) => {
+                        const total = coloristaAnalytics.clienteData.reduce((sum, c) => sum + c.value, 0);
+                        const percentage = ((cliente.value / total) * 100).toFixed(1);
+                        return (
+                          <tr key={cliente.name} className={`border-b ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
+                            <td className={`px-4 py-3 text-sm ${textSecondary}`}>#{index + 1}</td>
+                            <td className={`px-4 py-3 text-sm font-medium ${textPrimary}`}>{cliente.name}</td>
+                            <td className={`px-4 py-3 text-sm ${textSecondary}`}>{cliente.value}</td>
+                            <td className={`px-4 py-3 text-sm ${textSecondary}`}>
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[60px]">
+                                  <div 
+                                    className="bg-purple-500 h-2 rounded-full" 
+                                    style={{width: `${percentage}%`}}
+                                  ></div>
+                                </div>
+                                <span className="text-xs">{percentage}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // VISTA PARA PERFILES REGULARES (NO ADMIN, NO COLORISTA)
+  // ==========================================
+  
   if (currentProfile !== 'Admin') {
     return (
       <div className={`min-h-screen ${bgClass} p-4`}>
@@ -1032,6 +1470,7 @@ const ColorSampleTracker = () => {
                   <option value="ROBIN">ROBIN</option>
                   <option value="TAVO">TAVO</option>
                   <option value="VLADIMIR">VLADIMIR</option>
+                  <option value="ARLES">ARLES</option>
                 </select>
               </div>
 
@@ -1048,10 +1487,33 @@ const ColorSampleTracker = () => {
     );
   }
 
-  // Vista Admin - CONTINÚA EN EL SIGUIENTE MENSAJE...
+  // ==========================================
+  // NOTA: La vista de ADMIN es muy grande
+  // La próxima respuesta contendrá SOLO la vista Admin
+  // Por ahora, cierra el componente aquí:
+  // ==========================================
+
+
+// ==========================================
+// VISTA ADMIN COMPLETA
+// ==========================================
+
+// REEMPLAZA la línea: return <div>Vista Admin - Ver archivo completo final</div>;
+// Con TODO este código:
+
+  // Vista Admin
+// ==========================================
+// VISTA ADMIN COMPLETA
+// ==========================================
+
+// REEMPLAZA la línea: return <div>Vista Admin - Ver archivo completo final</div>;
+// Con TODO este código:
+
+  // Vista Admin
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4`}>
       <div className="max-w-7xl mx-auto">
+        {/* Header Principal */}
         <div className={`${cardBg} rounded-2xl shadow-lg p-6 mb-6`}>
           <div className="flex justify-between items-center flex-wrap gap-4">
             <h1 className={`text-3xl font-bold ${textPrimary}`}>Panel de Administración</h1>
@@ -1115,6 +1577,7 @@ const ColorSampleTracker = () => {
           </div>
         </div>
 
+        {/* Panel de Notificaciones */}
         {showNotifications && notifications.length > 0 && (
           <div className={`${cardBg} rounded-2xl shadow-lg p-6 mb-6`}>
             <div className="flex items-center justify-between mb-4">
@@ -1166,7 +1629,6 @@ const ColorSampleTracker = () => {
               </div>
             </div>
 
-            {/* Buscador de clientes */}
             <div className="mb-4">
               <div className="relative">
                 <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${textSecondary}`} />
@@ -1180,7 +1642,6 @@ const ColorSampleTracker = () => {
               </div>
             </div>
 
-            {/* Lista de clientes */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredClients.length === 0 ? (
                 <div className="col-span-full text-center py-8">
@@ -1254,6 +1715,7 @@ const ColorSampleTracker = () => {
           </div>
         )}
 
+        {/* Barra de Búsqueda Global */}
         <div className={`${cardBg} rounded-2xl shadow-lg p-6 mb-6`}>
           <div className="flex items-center gap-4">
             <div className="flex-1 relative">
@@ -1277,6 +1739,7 @@ const ColorSampleTracker = () => {
           </div>
         </div>
 
+        {/* Panel de Filtros Avanzados */}
         {showFilters && (
           <div className={`${cardBg} rounded-2xl shadow-lg p-6 mb-6`}>
             <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>Filtros Avanzados</h3>
@@ -1305,6 +1768,7 @@ const ColorSampleTracker = () => {
                   <option value="ROBIN">ROBIN</option>
                   <option value="TAVO">TAVO</option>
                   <option value="VLADIMIR">VLADIMIR</option>
+                  <option value="ARLES">ARLES</option>
                 </select>
               </div>
               <div>
@@ -1360,6 +1824,9 @@ const ColorSampleTracker = () => {
           </div>
         )}
 
+        {/* MODALES */}
+        
+        {/* Modal de Reportes */}
         {showReportModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className={`${cardBg} rounded-2xl p-8 max-w-md w-full`}>
@@ -1418,6 +1885,7 @@ const ColorSampleTracker = () => {
           </div>
         )}
 
+        {/* Modal Eliminar Todos los Datos */}
         {showDeleteModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className={`${cardBg} rounded-2xl p-8 max-w-md w-full`}>
@@ -1447,6 +1915,7 @@ const ColorSampleTracker = () => {
           </div>
         )}
 
+        {/* Modal Editar Encuesta */}
         {showEditModal && surveyToEdit && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className={`${cardBg} rounded-2xl p-8 max-w-md w-full`}>
@@ -1497,6 +1966,7 @@ const ColorSampleTracker = () => {
                     <option value="ROBIN">ROBIN</option>
                     <option value="TAVO">TAVO</option>
                     <option value="VLADIMIR">VLADIMIR</option>
+                    <option value="ARLES">ARLES</option>
                   </select>
                 </div>
               </div>
@@ -1522,6 +1992,7 @@ const ColorSampleTracker = () => {
           </div>
         )}
 
+        {/* Modal Eliminar Encuesta */}
         {showDeleteSurveyModal && surveyToDelete && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className={`${cardBg} rounded-2xl p-8 max-w-md w-full`}>
@@ -1783,6 +2254,8 @@ const ColorSampleTracker = () => {
           </div>
         )}
 
+        {/* Modal Dashboard del Cliente - CONTINUARÁ EN LA SIGUIENTE PARTE... */}
+        // ==========================================
         {/* Modal Dashboard del Cliente */}
         {showClientDashboard && selectedClient && (() => {
           const clientAnalytics = getClientAnalytics(selectedClient.nombre);
@@ -1987,6 +2460,7 @@ const ColorSampleTracker = () => {
           );
         })()}
 
+        {/* Tarjeta de Total de Muestras */}
         <div className="mb-6">
           <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-xl p-6 shadow-lg">
             <div className="flex items-center justify-between">
@@ -2010,6 +2484,7 @@ const ColorSampleTracker = () => {
           <>
             {analytics && (
               <>
+                {/* Tarjetas de Estadísticas Principales */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                   <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-6 shadow-lg">
                     <div className="flex items-center justify-between">
@@ -2056,6 +2531,7 @@ const ColorSampleTracker = () => {
                   </div>
                 </div>
 
+                {/* Gráfico de Tendencia */}
                 <div className={`${cardBg} rounded-xl shadow-lg p-6 mb-6`}>
                   <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>📈 Tendencia (Últimos 30 Días)</h3>
                   <ResponsiveContainer width="100%" height={300}>
@@ -2220,6 +2696,7 @@ const ColorSampleTracker = () => {
                   </div>
                 </div>
 
+                {/* Tabla de Todos los Registros */}
                 <div className={`${cardBg} rounded-xl shadow-lg p-6`}>
                   <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>Todos los Registros ({getFilteredSurveys().length})</h3>
                   <div className="overflow-x-auto">
