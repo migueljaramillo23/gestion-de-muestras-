@@ -13,7 +13,7 @@ const ColorSampleTracker = () => {
   // ESTADOS
   // ==========================================
   const [currentProfile, setCurrentProfile] = useState(null);
-  const [profiles, setProfiles] = useState(['Perfil 1', 'Admin', 'ROBIN', 'TAVO', 'VLADIMIR', 'ARLES']);
+  const [profiles, setProfiles] = useState(['Perfil 1', 'Admin', 'ROBIN', 'TAVO', 'VLADIMIR', 'ARLES', 'VILLADA', 'CURA', 'CRISTIAN', 'FRANSUA']);
   const [newProfileName, setNewProfileName] = useState('');
   const [showNewProfileForm, setShowNewProfileForm] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
@@ -80,7 +80,7 @@ const ColorSampleTracker = () => {
   
   // Estado para el filtro de período del colorista
   const [coloristaFilter, setColoristaFilter] = useState('all');
-  
+  const [domiciliarioFilter, setDomiciliarioFilter] = useState('all');
   const [formData, setFormData] = useState({
     domiciliario: '',
     cliente: '',
@@ -93,7 +93,7 @@ const ColorSampleTracker = () => {
 
   // Perfiles de coloristas
   const coloristaProfiles = ['ROBIN', 'TAVO', 'VLADIMIR', 'ARLES'];
-
+  const domiciliarioProfiles = ['VILLADA', 'CURA', 'CRISTIAN', 'FRANSUA'];
   // ==========================================
   // EFECTOS - CARGA DE DATOS
   // ==========================================
@@ -145,7 +145,7 @@ const ColorSampleTracker = () => {
     
     if (savedProfiles) {
       const loadedProfiles = JSON.parse(savedProfiles);
-      const updatedProfiles = [...new Set([...loadedProfiles, 'ROBIN', 'TAVO', 'VLADIMIR', 'ARLES'])];
+      const updatedProfiles = [...new Set([...loadedProfiles, 'ROBIN', 'TAVO', 'VLADIMIR', 'ARLES', 'VILLADA', 'CURA', 'CRISTIAN', 'FRANSUA'])];
       setProfiles(updatedProfiles);
     }
     if (savedDarkMode) setDarkMode(JSON.parse(savedDarkMode));
@@ -287,6 +287,77 @@ const ColorSampleTracker = () => {
       monthlyData: monthlyArray
     };
   };
+
+  // ==========================================
+  // FUNCIONES DE DOMICILIARIOS
+  // ==========================================
+
+  const getDomiciliarioSurveysByPeriod = (domiciliarioNombre) => {
+  const now = new Date();
+  let startDate = new Date();
+  
+  switch(domiciliarioFilter) {
+    case 'day':
+      startDate.setHours(0, 0, 0, 0);
+      break;
+    case 'week':
+      startDate.setDate(now.getDate() - 7);
+      break;
+    case 'month':
+      startDate.setMonth(now.getMonth() - 1);
+      break;
+    case 'year':
+      startDate.setFullYear(now.getFullYear() - 1);
+      break;
+    case 'all':
+    default:
+      startDate = new Date(0);
+      break;
+  }
+  
+  return surveys.filter(s => 
+    s.domiciliario === domiciliarioNombre && 
+    new Date(s.fecha) >= startDate
+   );
+  };
+
+const getDomiciliarioAnalytics = (domiciliarioNombre) => {
+  const domiciliarioSurveys = getDomiciliarioSurveysByPeriod(domiciliarioNombre);
+  
+  if (domiciliarioSurveys.length === 0) return null;
+
+  const coloristaCount = {};
+  const clienteCount = {};
+  const monthlyData = {};
+
+  domiciliarioSurveys.forEach(s => {
+    coloristaCount[s.colorista] = (coloristaCount[s.colorista] || 0) + 1;
+    clienteCount[s.cliente] = (clienteCount[s.cliente] || 0) + 1;
+    
+    const date = new Date(s.fecha);
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    monthlyData[monthKey] = (monthlyData[monthKey] || 0) + 1;
+  });
+
+  const monthlyArray = Object.entries(monthlyData)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, count]) => ({
+      mes: month,
+      muestras: count
+    }));
+
+  const bonificacion = domiciliarioSurveys.length * 500; // 500 COP por muestra
+
+  return {
+    totalMuestras: domiciliarioSurveys.length,
+    bonificacion: bonificacion,
+    coloristaMasFrecuente: Object.entries(coloristaCount).sort((a, b) => b[1] - a[1])[0],
+    clienteMasFrecuente: Object.entries(clienteCount).sort((a, b) => b[1] - a[1])[0],
+    coloristaData: Object.entries(coloristaCount).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    clienteData: Object.entries(clienteCount).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+    monthlyData: monthlyArray
+  };
+};
 
   // ==========================================
   // CONTINÚA EN PARTE 2...
@@ -664,7 +735,7 @@ const ColorSampleTracker = () => {
   };
 
   const deleteProfile = () => {
-    if (profileToDelete && profileToDelete !== 'Admin' && !coloristaProfiles.includes(profileToDelete)) {
+    if (profileToDelete && profileToDelete !== 'Admin' && !coloristaProfiles.includes(profileToDelete) && !domiciliarioProfiles.includes(profileToDelete)) {
       const updatedProfiles = profiles.filter(p => p !== profileToDelete);
       setProfiles(updatedProfiles);
       setShowDeleteProfileModal(false);
@@ -911,7 +982,7 @@ const ColorSampleTracker = () => {
                 >
                   {profile}
                 </button>
-                {profile !== 'Admin' && !coloristaProfiles.includes(profile) && (
+                {profile !== 'Admin' && !coloristaProfiles.includes(profile) && !domiciliarioProfiles.includes(profile) && (
                   <button
                     onClick={() => {
                       setProfileToDelete(profile);
@@ -1353,6 +1424,329 @@ const ColorSampleTracker = () => {
       </div>
     );
   }
+  
+  // ==========================================
+// VISTA DE PERFIL DE DOMICILIARIO (VILLADA, CURA, CRISTIAN, FRANSUA)
+// ==========================================
+
+if (domiciliarioProfiles.includes(currentProfile)) {
+  const domiciliarioAnalytics = getDomiciliarioAnalytics(currentProfile);
+  
+  const getPeriodLabel = () => {
+    switch(domiciliarioFilter) {
+      case 'day': return 'Hoy';
+      case 'week': return 'Esta Semana';
+      case 'month': return 'Este Mes';
+      case 'year': return 'Este Año';
+      case 'all': return 'Todo el Tiempo';
+      default: return 'Todo el Tiempo';
+    }
+  };
+
+  return (
+    <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4`}>
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className={`${cardBg} rounded-2xl shadow-lg p-6 mb-6`}>
+          <div className="flex justify-between items-center flex-wrap gap-4">
+            <div>
+              <h1 className={`text-3xl font-bold ${textPrimary}`}>Dashboard de {currentProfile}</h1>
+              <p className={textSecondary}>Panel de estadísticas y bonificaciones</p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}>
+                {darkMode ? <Sun className="w-6 h-6 text-yellow-400" /> : <Moon className="w-6 h-6 text-gray-600" />}
+              </button>
+              <button
+                onClick={() => setCurrentProfile(null)}
+                className="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-all"
+              >
+                Cerrar Sesión
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Filtro de Período */}
+        <div className={`${cardBg} rounded-2xl shadow-lg p-6 mb-6`}>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <Calendar className={`w-6 h-6 ${darkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+              <h3 className={`text-xl font-bold ${textPrimary}`}>Período: {getPeriodLabel()}</h3>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setDomiciliarioFilter('day')}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  domiciliarioFilter === 'day' 
+                    ? 'bg-purple-500 text-white' 
+                    : `${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} hover:bg-purple-400 hover:text-white`
+                }`}
+              >
+                Día
+              </button>
+              <button
+                onClick={() => setDomiciliarioFilter('week')}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  domiciliarioFilter === 'week' 
+                    ? 'bg-purple-500 text-white' 
+                    : `${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} hover:bg-purple-400 hover:text-white`
+                }`}
+              >
+                Semana
+              </button>
+              <button
+                onClick={() => setDomiciliarioFilter('month')}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  domiciliarioFilter === 'month' 
+                    ? 'bg-purple-500 text-white' 
+                    : `${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} hover:bg-purple-400 hover:text-white`
+                }`}
+              >
+                Mes
+              </button>
+              <button
+                onClick={() => setDomiciliarioFilter('year')}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  domiciliarioFilter === 'year' 
+                    ? 'bg-purple-500 text-white' 
+                    : `${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} hover:bg-purple-400 hover:text-white`
+                }`}
+              >
+                Año
+              </button>
+              <button
+                onClick={() => setDomiciliarioFilter('all')}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  domiciliarioFilter === 'all' 
+                    ? 'bg-purple-500 text-white' 
+                    : `${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} hover:bg-purple-400 hover:text-white`
+                }`}
+              >
+                Todo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {!domiciliarioAnalytics ? (
+          <div className={`${cardBg} rounded-2xl shadow-lg p-12 text-center`}>
+            <Package className={`w-20 h-20 mx-auto mb-4 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+            <h3 className={`text-2xl font-semibold ${textSecondary} mb-2`}>No hay muestras en este período</h3>
+            <p className={textSecondary}>Cambia el filtro de período para ver más datos</p>
+          </div>
+        ) : (
+          <>
+            {/* Tarjetas de Estadísticas Principales */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-6 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-blue-100 text-sm">Total de Muestras</p>
+                    <p className="text-3xl font-bold mt-1">{domiciliarioAnalytics.totalMuestras}</p>
+                    <p className="text-blue-100 text-sm mt-1">entregadas</p>
+                  </div>
+                  <Package className="w-12 h-12 text-blue-200" />
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl p-6 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-green-100 text-sm">Bonificación</p>
+                    <p className="text-3xl font-bold mt-1">
+                      ${domiciliarioAnalytics.bonificacion.toLocaleString('es-CO')}
+                    </p>
+                    <p className="text-green-100 text-sm mt-1">COP</p>
+                  </div>
+                  <DollarSign className="w-12 h-12 text-green-200" />
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl p-6 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-purple-100 text-sm">Colorista Frecuente</p>
+                    <p className="text-xl font-bold mt-1">
+                      {domiciliarioAnalytics.coloristaMasFrecuente ? domiciliarioAnalytics.coloristaMasFrecuente[0] : 'N/A'}
+                    </p>
+                    <p className="text-purple-100 text-sm mt-1">
+                      {domiciliarioAnalytics.coloristaMasFrecuente ? `${domiciliarioAnalytics.coloristaMasFrecuente[1]} entregas` : ''}
+                    </p>
+                  </div>
+                  <Palette className="w-12 h-12 text-purple-200" />
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-xl p-6 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-orange-100 text-sm">Cliente Frecuente</p>
+                    <p className="text-xl font-bold mt-1">
+                      {domiciliarioAnalytics.clienteMasFrecuente ? domiciliarioAnalytics.clienteMasFrecuente[0] : 'N/A'}
+                    </p>
+                    <p className="text-orange-100 text-sm mt-1">
+                      {domiciliarioAnalytics.clienteMasFrecuente ? `${domiciliarioAnalytics.clienteMasFrecuente[1]} muestras` : ''}
+                    </p>
+                  </div>
+                  <Users className="w-12 h-12 text-orange-200" />
+                </div>
+              </div>
+            </div>
+
+            {/* Información de Bonificación Detallada */}
+            <div className={`${cardBg} rounded-2xl shadow-lg p-6 mb-6`}>
+              <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>💰 Desglose de Bonificación</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-4`}>
+                  <p className={`text-sm ${textSecondary}`}>Muestras Entregadas</p>
+                  <p className={`text-2xl font-bold ${textPrimary}`}>{domiciliarioAnalytics.totalMuestras}</p>
+                </div>
+                <div className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-4`}>
+                  <p className={`text-sm ${textSecondary}`}>Bonificación por Muestra</p>
+                  <p className={`text-2xl font-bold ${textPrimary}`}>$500 COP</p>
+                </div>
+                <div className={`${darkMode ? 'bg-gray-700' : 'bg-green-50'} rounded-lg p-4 border-2 ${darkMode ? 'border-green-600' : 'border-green-500'}`}>
+                  <p className={`text-sm ${darkMode ? 'text-green-400' : 'text-green-700'}`}>Total a Recibir</p>
+                  <p className={`text-2xl font-bold ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
+                    ${domiciliarioAnalytics.bonificacion.toLocaleString('es-CO')} COP
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Gráficos */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Distribución por Colorista */}
+              <div className={`${cardBg} rounded-xl shadow-lg p-6`}>
+                <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>Entregas por Colorista</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={domiciliarioAnalytics.coloristaData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {domiciliarioAnalytics.coloristaData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Top Clientes */}
+              <div className={`${cardBg} rounded-xl shadow-lg p-6`}>
+                <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>Top 10 Clientes</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={domiciliarioAnalytics.clienteData.slice(0, 10)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#8b5cf6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Gráfico de Tendencia Mensual */}
+            {domiciliarioAnalytics.monthlyData.length > 0 && (
+              <div className={`${cardBg} rounded-xl shadow-lg p-6 mb-6`}>
+                <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>📈 Tendencia de Entregas por Mes</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={domiciliarioAnalytics.monthlyData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="mes" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="muestras" stroke="#8b5cf6" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Tablas Detalladas */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Tabla de Coloristas */}
+              <div className={`${cardBg} rounded-xl shadow-lg p-6`}>
+                <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>Ranking de Coloristas</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-100'}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Pos.</th>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Colorista</th>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Entregas</th>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {domiciliarioAnalytics.coloristaData.map((colorista, index) => {
+                        const total = domiciliarioAnalytics.coloristaData.reduce((sum, c) => sum + c.value, 0);
+                        const percentage = ((colorista.value / total) * 100).toFixed(1);
+                        return (
+                          <tr key={colorista.name} className={`border-b ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
+                            <td className={`px-4 py-3 text-sm ${textSecondary}`}>#{index + 1}</td>
+                            <td className={`px-4 py-3 text-sm font-medium ${textPrimary}`}>{colorista.name}</td>
+                            <td className={`px-4 py-3 text-sm ${textSecondary}`}>{colorista.value}</td>
+                            <td className={`px-4 py-3 text-sm ${textSecondary}`}>
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[60px]">
+                                  <div 
+                                    className="bg-purple-500 h-2 rounded-full" 
+                                    style={{width: `${percentage}%`}}
+                                  ></div>
+                                </div>
+                                <span className="text-xs">{percentage}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Tabla de Clientes */}
+              <div className={`${cardBg} rounded-xl shadow-lg p-6`}>
+                <h3 className={`text-xl font-bold ${textPrimary} mb-4`}>Todos los Clientes ({domiciliarioAnalytics.clienteData.length})</h3>
+                <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                  <table className="w-full">
+                    <thead className={`${darkMode ? 'bg-gray-700' : 'bg-gray-100'} sticky top-0`}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Pos.</th>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Cliente</th>
+                        <th className={`px-4 py-3 text-left text-sm font-semibold ${textPrimary}`}>Muestras</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {domiciliarioAnalytics.clienteData.map((cliente, index) => (
+                        <tr key={cliente.name} className={`border-b ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
+                          <td className={`px-4 py-3 text-sm ${textSecondary}`}>#{index + 1}</td>
+                          <td className={`px-4 py-3 text-sm font-medium ${textPrimary}`}>{cliente.name}</td>
+                          <td className={`px-4 py-3 text-sm ${textSecondary}`}>{cliente.value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
   // ==========================================
   // VISTA PARA PERFILES REGULARES (NO ADMIN, NO COLORISTA)
